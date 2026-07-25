@@ -8,9 +8,9 @@
 namespace Hooks {
     static float GetActorValueSafe(RE::Actor* a_actor, RE::ActorValue a_value) {
         if (!a_actor) return 0.0f;
-        size_t offset = REL::Module::IsVR() ? 0xB8 : (REL::Module::IsAE() ? 0xB8 : 0xB0);
-        auto avOwner = reinterpret_cast<RE::ActorValueOwner*>(reinterpret_cast<uintptr_t>(a_actor) + offset);
-        return avOwner->GetActorValue(a_value);
+        auto owner = a_actor->AsActorValueOwner();
+        if (owner) return owner->GetActorValue(a_value);
+        return 0.0f;
     }
 
     static void UpdateProjectileAimAssist(RE::Projectile* a_this, float a_delta) {
@@ -59,22 +59,28 @@ namespace Hooks {
             return;
         }
 
+        float skillValue = 15.0f;
+        std::string skillName = "Unknown";
+        if (a_this->GetFormType() == RE::FormType::ProjectileMissile) {
+            skillValue = GetActorValueSafe(player, RE::ActorValue::kDestruction);
+            skillName = "Destruction";
+        } else {
+            skillValue = GetActorValueSafe(player, RE::ActorValue::kArchery);
+            skillName = "Archery";
+        }
+
         if (Settings::EnableRuntimeLogs) {
             static std::unordered_set<RE::FormID> loggedProjectiles;
             if (loggedProjectiles.insert(a_this->GetFormID()).second) {
-                SKSE::log::info("AimAssistVR: Projectile {:08X} in flight. Tracking {} potential targets.", 
-                    a_this->GetFormID(), targets.size());
+                SKSE::log::info("AimAssistVR: Projectile {:08X} in flight. Tracking {} potential targets ({} Level: {:.0f}).", 
+                    a_this->GetFormID(), targets.size(), skillName, skillValue);
             }
         }
 
-        float archerySkill = GetActorValueSafe(player, RE::ActorValue::kArchery);
-        float skillFactor = std::clamp((archerySkill - 15.0f) / (100.0f - 15.0f), 0.0f, 1.0f);
+        float skillFactor = std::clamp((skillValue - 15.0f) / (100.0f - 15.0f), 0.0f, 1.0f);
         skillFactor = skillFactor * skillFactor;
 
-        float maxAngleCos = std::cos(Settings::MaxAngleDegrees * (3.14159265f / 180.0f));
         float currentZOffset = std::lerp(Settings::ChestZOffset, Settings::HeadZOffset, skillFactor);
-        float currentMagnetism = std::lerp(Settings::MinMagnetism, Settings::MaxMagnetism, skillFactor);
-        float timeScaledMagnetism = std::clamp(currentMagnetism * a_delta, 0.0f, 1.0f);
 
         RE::NiPoint3 projDir = projVel;
         projDir.x /= currentSpeed;
@@ -82,11 +88,8 @@ namespace Hooks {
         projDir.z /= currentSpeed;
 
         RE::Actor* bestTarget = nullptr;
-        float bestDot = -1.0f;
+        float bestPerpDist = 999999.0f;
         RE::NiPoint3 bestTargetCenter;
-
-        RE::Actor* absoluteBestTarget = nullptr;
-        float absoluteBestDot = -1.0f;
 
         for (auto target : targets) {
             RE::NiPoint3 targetPos = target->GetPosition();
@@ -94,21 +97,26 @@ namespace Hooks {
 
             RE::NiPoint3 toTarget = targetPos - projPos;
             float dist = toTarget.Length();
-            if (dist < 1.0f) continue;
+            if (dist < 1.0f || dist > (Settings::FarDistance * 1.5f)) continue;
 
-            toTarget.x /= dist;
-            toTarget.y /= dist;
-            toTarget.z /= dist;
+            bool dummy = false;
+            if (!player->HasLineOfSight(target, dummy)) continue;
 
-            float dotProduct = (projDir.x * toTarget.x) + (projDir.y * toTarget.y) + (projDir.z * toTarget.z);
-            
-            if (dotProduct > absoluteBestDot) {
-                absoluteBestDot = dotProduct;
-                absoluteBestTarget = target;
-            }
+            float dotProduct = (toTarget.x * projDir.x) + (toTarget.y * projDir.y) + (toTarget.z * projDir.z);
+            if (dotProduct <= 0.0f) continue; // Behind arrow
 
-            if (dotProduct > maxAngleCos && dotProduct > bestDot) {
-                bestDot = dotProduct;
+            RE::NiPoint3 projection = projDir;
+            projection.x *= dotProduct;
+            projection.y *= dotProduct;
+            projection.z *= dotProduct;
+
+            RE::NiPoint3 rejection = toTarget - projection;
+            float perpDist = rejection.Length();
+
+            float allowedRadius = Settings::BaseRadius + (dist / Settings::FarDistance) * (skillFactor * Settings::MaxSkillRadiusExpansion);
+
+            if (perpDist <= allowedRadius && perpDist < bestPerpDist) {
+                bestPerpDist = perpDist;
                 bestTarget = target;
                 bestTargetCenter = targetPos;
             }
@@ -118,6 +126,10 @@ namespace Hooks {
             RE::NiPoint3 toTarget = bestTargetCenter - projPos;
             float dist = toTarget.Length();
             if (dist > 0.0f) {
+                float distFactor = std::clamp((dist - Settings::CloseDistance) / (Settings::FarDistance - Settings::CloseDistance), 0.0f, 1.0f);
+                float currentMagnetism = std::lerp(Settings::CloseMagnetism, Settings::FarMagnetism, distFactor);
+                float timeScaledMagnetism = std::clamp(currentMagnetism * a_delta, 0.0f, 1.0f);
+
                 toTarget.x /= dist;
                 toTarget.y /= dist;
                 toTarget.z /= dist;
@@ -147,10 +159,11 @@ namespace Hooks {
                     static std::unordered_map<RE::FormID, RE::FormID> lockedTargets;
                     if (lockedTargets[a_this->GetFormID()] != bestTarget->GetFormID()) {
                         lockedTargets[a_this->GetFormID()] = bestTarget->GetFormID();
-                        SKSE::log::info("AimAssistVR: Projectile {:08X} locked on to target '{}' (FormID: {:08X})",
+                        SKSE::log::info("AimAssistVR: Projectile {:08X} locked on to target '{}' (FormID: {:08X}) at distance {:.1f}",
                             a_this->GetFormID(),
                             bestTarget->GetName() ? bestTarget->GetName() : "Unknown",
-                            bestTarget->GetFormID());
+                            bestTarget->GetFormID(),
+                            dist);
                     }
                 }
             }

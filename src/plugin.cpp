@@ -3,6 +3,7 @@
 #include "Hooks.h"
 #include "Settings.h"
 #include <spdlog/sinks/basic_file_sink.h>
+#include <SKSEMenuFramework.h>
 
 void InitializeLogging() {
     auto path = SKSE::log::log_directory();
@@ -22,9 +23,21 @@ void InitializeLogging() {
     spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%n] [%l] %v");
 }
 
+void __stdcall RenderMenuWrapper() {
+    Settings::RenderMenu();
+}
+
 void OnDataLoaded() {
     Hooks::Install();
     SKSE::log::info("AimAssistVR hooks installed.");
+
+    if (SKSEMenuFramework::IsInstalled()) {
+        SKSEMenuFramework::SetSection("Aim Assist VR");
+        SKSEMenuFramework::AddSectionItem("Settings", RenderMenuWrapper);
+        SKSE::log::info("AimAssistVR MCM registered with SKSEMenuFramework.");
+    } else {
+        SKSE::log::warn("SKSEMenuFramework not found. In-game menu disabled.");
+    }
 }
 
 void MessageHandler(SKSE::MessagingInterface::Message* a_msg) {
