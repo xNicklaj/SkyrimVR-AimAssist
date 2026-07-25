@@ -7,6 +7,8 @@ struct Settings {
     static inline float ChestZOffset = 50.0f;
     static inline float HeadZOffset = 120.0f;
     static inline bool EnableRuntimeLogs = false;
+    static inline bool TargetNeutralAnimals = true;
+    static inline bool TargetNeutralNPCs = false;
 
     static void Load();
 };
