@@ -1,0 +1,47 @@
+# Build directories
+.xmake/
+build/
+bin/
+out/
+dist/
+
+# Visual Studio / IDEs
+.vs/
+.vscode/
+.idea/
+.clangd/
+.cache/
+*.vcxproj.user
+*.suo
+*.user
+*.sln.docstates
+
+# Build artifacts & compiled binaries
+*.dll
+*.exe
+*.exp
+*.lib
+*.pdb
+*.ilk
+*.obj
+*.o
+*.a
+*.so
+*.dylib
+*.pch
+*.gch
+*.ipdb
+*.iobj
+compile_commands.json
+
+# Temporary data & logs
+*.log
+*.tmp
+*.bak
+*.csv
+
+# OS generated files
+[Dd]esktop.ini
+[Tt]humbs.db
+$RECYCLE.BIN/
+.DS_Store
