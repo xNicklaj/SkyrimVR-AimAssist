@@ -4,8 +4,8 @@ struct Settings {
     static inline float BaseRadius = 80.0f;
     static inline float MaxSkillRadiusExpansion = 100.0f;
     static inline float CloseMagnetism = 12.0f;
-    static inline float FarMagnetism = 0.5f;
-    static inline float CloseDistance = 500.0f;
+    static inline float FarMagnetism = 5.0f;
+    static inline float CloseDistance = 300.0f;
     static inline float FarDistance = 3000.0f;
     static inline float ChestZOffset = 50.0f;
     static inline float HeadZOffset = 120.0f;
