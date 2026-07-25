@@ -2,6 +2,8 @@
 #include "Settings.h"
 #include <vector>
 #include <cmath>
+#include <unordered_set>
+#include <unordered_map>
 
 namespace Hooks {
     static float GetActorValueSafe(RE::Actor* a_actor, RE::ActorValue a_value) {
@@ -55,6 +57,14 @@ namespace Hooks {
 
         if (targets.empty()) {
             return;
+        }
+
+        if (Settings::EnableRuntimeLogs) {
+            static std::unordered_set<RE::FormID> loggedProjectiles;
+            if (loggedProjectiles.insert(a_this->GetFormID()).second) {
+                SKSE::log::info("AimAssistVR: Projectile {:08X} in flight. Tracking {} potential targets.", 
+                    a_this->GetFormID(), targets.size());
+            }
         }
 
         float archerySkill = GetActorValueSafe(player, RE::ActorValue::kArchery);
@@ -131,6 +141,17 @@ namespace Hooks {
                     RE::NiMatrix3 rot;
                     rot.SetEulerAnglesXYZ(a_this->data.angle.x, a_this->data.angle.y, a_this->data.angle.z);
                     node3D->local.rotate = rot;
+                }
+
+                if (Settings::EnableRuntimeLogs) {
+                    static std::unordered_map<RE::FormID, RE::FormID> lockedTargets;
+                    if (lockedTargets[a_this->GetFormID()] != bestTarget->GetFormID()) {
+                        lockedTargets[a_this->GetFormID()] = bestTarget->GetFormID();
+                        SKSE::log::info("AimAssistVR: Projectile {:08X} locked on to target '{}' (FormID: {:08X})",
+                            a_this->GetFormID(),
+                            bestTarget->GetName() ? bestTarget->GetName() : "Unknown",
+                            bestTarget->GetFormID());
+                    }
                 }
             }
         }
